@@ -9,7 +9,7 @@ module tb;
    reg [7:0]  green;
    reg [7:0]  blue;
    
-   wire DO;
+   wire       DO;
    
    ws2811
      #(
