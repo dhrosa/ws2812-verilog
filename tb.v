@@ -13,7 +13,8 @@ module tb;
    
    ws2811
      #(
-       .NUM_LEDS(8)
+       .NUM_LEDS(8),
+       .SYSTEM_CLOCK(100000000)
        ) driver
        (
         .clk(clk),
@@ -39,7 +40,7 @@ module tb;
       green = 8'hAA;
       blue = 8'h00;
       
-      #5 reset = 0;
+      #50 reset = 0;
       #1000000 $finish();
    end
 
