@@ -98,10 +98,10 @@ module ws2811
               state <= STATE_TRANSMIT;
            end
            STATE_TRANSMIT: begin
-              if (current_byte[7] == 0 && clock_div == H0_CYCLE_COUNT) begin
+              if (current_byte[7] == 0 && clock_div >= H0_CYCLE_COUNT) begin
                  DO <= 0;
               end
-              else if (current_byte[7] == 1 && clock_div == H1_CYCLE_COUNT) begin
+              else if (current_byte[7] == 1 && clock_div >= H1_CYCLE_COUNT) begin
                  DO <= 0;
               end
               if (clock_div == CYCLE_COUNT-1) begin
