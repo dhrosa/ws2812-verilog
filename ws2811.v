@@ -2,8 +2,6 @@
 // Driver for WS2811-based LED strips //
 ////////////////////////////////////////
 
-`include "util.v"
-
 module ws2811
   #(
     parameter NUM_LEDS          = 4,          // The number of LEDS in the chain
@@ -30,21 +28,30 @@ module ws2811
     output reg                         DO            // Signal to send to WS2811 chain.
     );
    
-   localparam LED_ADDRESS_WIDTH = `log2(NUM_LEDS);         // Number of bits to use for address input
+   function integer log2;
+      input integer                    value;
+      begin
+         value = value-1;
+         for (log2=0; value>0; log2=log2+1)
+           value = value>>1;
+      end
+   endfunction
+	
+   localparam integer LED_ADDRESS_WIDTH = log2(NUM_LEDS);         // Number of bits to use for address input
 
    /////////////////////////////////////////////////////////////
    // Timing parameters for the WS2811                        //
    // The LEDs are reset by driving D0 low for at least 50us. //
-   // Data is transmitted using a 400kHz signal.              //
+   // Data is transmitted using a 800kHz signal.              //
    // A '1' is 50% duty cycle, a '0' is 20% duty cycle.       //
    /////////////////////////////////////////////////////////////
-   localparam CYCLE_COUNT         = SYSTEM_CLOCK / 400000;
-   localparam H0_CYCLE_COUNT      = 0.2 * CYCLE_COUNT;
-   localparam H1_CYCLE_COUNT      = 0.5 * CYCLE_COUNT;
-   localparam CLOCK_DIV_WIDTH     = `log2(CYCLE_COUNT);
+   localparam integer CYCLE_COUNT         = SYSTEM_CLOCK / 800000;
+   localparam integer H0_CYCLE_COUNT      = 0.32 * CYCLE_COUNT;
+   localparam integer H1_CYCLE_COUNT      = 0.64 * CYCLE_COUNT;
+   localparam integer CLOCK_DIV_WIDTH     = log2(CYCLE_COUNT);
    
-   localparam RESET_COUNT         = 30 * CYCLE_COUNT;
-   localparam RESET_COUNTER_WIDTH = `log2(RESET_COUNT);
+   localparam integer RESET_COUNT         = 100 * CYCLE_COUNT;
+   localparam integer RESET_COUNTER_WIDTH = log2(RESET_COUNT);
 
    reg [CLOCK_DIV_WIDTH-1:0]             clock_div;           // Clock divider for a cycle
    reg [RESET_COUNTER_WIDTH-1:0]         reset_counter;       // Counter for a reset cycle
@@ -56,15 +63,15 @@ module ws2811
    localparam STATE_POST     = 3'd4;
    reg [2:0]                           state;              // FSM state
 
-   localparam COLOR_R     = 2'd0;
-   localparam COLOR_G     = 2'd1;
+   localparam COLOR_G     = 2'd0;
+   localparam COLOR_R     = 2'd1;
    localparam COLOR_B     = 2'd2;
    reg [1:0]                           color;              // Current color being transferred
                           
    reg [7:0]                           red;
    reg [7:0]                           green;
    reg [7:0]                           blue;
-
+   
    reg [7:0]                           current_byte;       // Current byte to send
    reg [2:0]                           current_bit;        // Current bit index to send
 
@@ -83,6 +90,8 @@ module ws2811
          state <= STATE_RESET;
          DO <= 0;
          reset_counter <= 0;
+         color <= COLOR_G;
+         current_bit <= 7;
       end
       else begin
          case (state)
@@ -99,15 +108,16 @@ module ws2811
            end // case: STATE_RESET
            STATE_LATCH: begin
               // Latch the input
-              green <= green_in;
+              red <= red_in;
+//              green <= green_in;
               blue <= blue_in;
 
               // Setup the new address
               address <= address + 1;
               
-              // Start sending red
-              color <= COLOR_R;
-              current_byte <= red_in;
+              // Start sending green
+              color <= COLOR_G;
+              current_byte <= green_in;
               current_bit <= 7;
               
               state <= STATE_PRE;
@@ -138,21 +148,31 @@ module ws2811
               if (current_bit != 0) begin
                  // Start sending next bit of data
                  current_byte <= {current_byte[6:0], 1'b0};
-                 current_bit <= current_bit - 1;
+                 case (current_bit)
+                    7: current_bit <= 6;
+                    6: current_bit <= 5;
+                    5: current_bit <= 4;
+                    4: current_bit <= 3;
+                    3: current_bit <= 2;
+                    2: current_bit <= 1;
+                    1: current_bit <= 0;
+                 endcase
                  state <= STATE_PRE;
               end
               else begin
                  // Advance to the next color. If we were on blue, advance to the next LED
                  case (color)
-                    COLOR_R: begin
-                       color <= COLOR_G;
-                       current_byte <= green;
+                    COLOR_G: begin
+                       color <= COLOR_R;
+                       current_byte <= red;
                        current_bit <= 7;
+                       state <= STATE_PRE;
                     end
-                   COLOR_G: begin
+                   COLOR_R: begin
                       color <= COLOR_B;
                       current_byte <= blue;
                       current_bit <= 7;
+                      state <= STATE_PRE;
                    end
                    COLOR_B: begin
                       // If we were on the last LED, send out reset pulse
